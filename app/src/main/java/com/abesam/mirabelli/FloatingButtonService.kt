@@ -1,6 +1,9 @@
 package com.abesam.mirabelli
 
 import android.app.Service
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
@@ -17,8 +20,13 @@ class FloatingButtonService : Service() {
     private lateinit var orb: GoldenOrbView
     private lateinit var params: WindowManager.LayoutParams
 
+    private val channelId = "mirabelli_service"
+
     override fun onCreate() {
         super.onCreate()
+
+        createNotificationChannel()
+        startForeground(101, createNotification())
 
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         orb = GoldenOrbView(this)
@@ -86,6 +94,36 @@ class FloatingButtonService : Service() {
         }
 
         windowManager.addView(orb, params)
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                "Mirabelli Assistant",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun createNotification(): Notification {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, channelId)
+                .setContentTitle("Mirabelli by ABESAM")
+                .setContentText("Golden Orb is active")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setOngoing(true)
+                .build()
+        } else {
+            Notification.Builder(this)
+                .setContentTitle("Mirabelli by ABESAM")
+                .setContentText("Golden Orb is active")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setOngoing(true)
+                .build()
+        }
     }
 
     override fun onDestroy() {
