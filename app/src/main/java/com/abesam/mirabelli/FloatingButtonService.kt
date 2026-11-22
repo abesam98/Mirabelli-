@@ -38,8 +38,8 @@ class FloatingButtonService : Service() {
         }
 
         params = WindowManager.LayoutParams(
-            110,
-            110,
+            150,
+            150,
             windowType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
