@@ -1,15 +1,17 @@
 package com.abesam.mirabelli
 
-import android.app.Service
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.Service
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
+import android.util.DisplayMetrics
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.widget.Toast
 import kotlin.math.abs
@@ -31,69 +33,78 @@ class FloatingButtonService : Service() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         orb = GoldenOrbView(this)
 
-        val windowType = if (Build.VERSION.SDK_INT >= 26) {
+        val windowType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         } else {
+            @Suppress("DEPRECATION")
             WindowManager.LayoutParams.TYPE_PHONE
         }
+        val orbSize = (150f * resources.displayMetrics.density).toInt()
 
         params = WindowManager.LayoutParams(
-            150,
-            150,
+            orbSize,
+            orbSize,
             windowType,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 40
-            y = 300
+            x = (24f * resources.displayMetrics.density).toInt()
+            y = (180f * resources.displayMetrics.density).toInt()
         }
 
-        var startX = 0f
-        var startY = 0f
+        installDragAndTapHandling()
+        windowManager.addView(orb, params)
+    }
+
+    private fun installDragAndTapHandling() {
+        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
+        var downRawX = 0f
+        var downRawY = 0f
         var initialX = 0
         var initialY = 0
-        var moved = false
+        var dragging = false
 
         orb.setOnTouchListener { _, event ->
-            when (event.action) {
+            when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    startX = event.rawX
-                    startY = event.rawY
+                    downRawX = event.rawX
+                    downRawY = event.rawY
                     initialX = params.x
                     initialY = params.y
-                    moved = false
+                    dragging = false
                     true
                 }
 
                 MotionEvent.ACTION_MOVE -> {
-                    val dx = event.rawX - startX
-                    val dy = event.rawY - startY
-
-                    if (abs(dx) > 8 || abs(dy) > 8) moved = true
-
-                    params.x = initialX + dx.toInt()
-                    params.y = initialY + dy.toInt()
-                    windowManager.updateViewLayout(orb, params)
-                    true
-                }
-
-                MotionEvent.ACTION_UP -> {
-                    if (!moved) {
-                        Toast.makeText(
-                            this,
-                            "Yes Boss, nakusikiliza.",
-                            Toast.LENGTH_SHORT
-                        ).show()
+                    val dx = event.rawX - downRawX
+                    val dy = event.rawY - downRawY
+                    if (!dragging && (abs(dx) > touchSlop || abs(dy) > touchSlop)) dragging = true
+                    if (dragging) {
+                        val metrics = DisplayMetrics()
+                        @Suppress("DEPRECATION")
+                        windowManager.defaultDisplay.getMetrics(metrics)
+                        val maxX = (metrics.widthPixels - params.width).coerceAtLeast(0)
+                        val maxY = (metrics.heightPixels - params.height).coerceAtLeast(0)
+                        params.x = (initialX + dx.toInt()).coerceIn(0, maxX)
+                        params.y = (initialY + dy.toInt()).coerceIn(0, maxY)
+                        windowManager.updateViewLayout(orb, params)
                     }
                     true
                 }
 
+                MotionEvent.ACTION_UP -> {
+                    if (!dragging) {
+                        Toast.makeText(this, "Yes Boss", Toast.LENGTH_SHORT).show()
+                    }
+                    true
+                }
+
+                MotionEvent.ACTION_CANCEL -> true
                 else -> true
             }
         }
-
-        windowManager.addView(orb, params)
     }
 
     private fun createNotificationChannel() {
@@ -103,27 +114,23 @@ class FloatingButtonService : Service() {
                 "Mirabelli Assistant",
                 NotificationManager.IMPORTANCE_LOW
             )
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
 
     private fun createNotification(): Notification {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, channelId)
-                .setContentTitle("Mirabelli by ABESAM")
-                .setContentText("Golden Orb is active")
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setOngoing(true)
-                .build()
         } else {
+            @Suppress("DEPRECATION")
             Notification.Builder(this)
-                .setContentTitle("Mirabelli by ABESAM")
-                .setContentText("Golden Orb is active")
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setOngoing(true)
-                .build()
         }
+        return builder
+            .setContentTitle("MIRABELLI BY ABESAM")
+            .setContentText("Golden Orb is active")
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setOngoing(true)
+            .build()
     }
 
     override fun onDestroy() {
@@ -132,6 +139,8 @@ class FloatingButtonService : Service() {
         }
         super.onDestroy()
     }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
     override fun onBind(intent: Intent?): IBinder? = null
 }
